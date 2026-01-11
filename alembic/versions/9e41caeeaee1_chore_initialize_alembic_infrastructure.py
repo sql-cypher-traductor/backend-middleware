@@ -1,8 +1,8 @@
 """chore: initialize alembic infrastructure
 
-Revision ID: 1bbbd0e9e38a
-Revises:
-Create Date: 2026-01-11 16:56:56.906274
+Revision ID: 9e41caeeaee1
+Revises: 45ba80957fff
+Create Date: 2026-01-11 18:17:38.738034
 
 """
 
@@ -13,8 +13,8 @@ import sqlalchemy as sa
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = "1bbbd0e9e38a"
-down_revision: Union[str, Sequence[str], None] = None
+revision: str = "9e41caeeaee1"
+down_revision: Union[str, Sequence[str], None] = "45ba80957fff"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

@@ -1,14 +1,14 @@
-# 1. Usamos una imagen base oficial de Python ligera
+# 1. Invocar imagen de Python
 FROM python:3.14-slim
 
-# 2. Evitamos que Python genere archivos .pyc y activamos logs en tiempo real
+# 2. Omitir archivos .pyc y logs
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
 # 3. Directorio de trabajo dentro del contenedor
 WORKDIR /app
 
-# 4. Instalar dependencias del sistema necesarias para compilar (Postgres driver, etc.)
+# 4. Instalar dependencias del sistema necesarias para compilar
 RUN apt-get update \
     && apt-get install -y --no-install-recommends gcc libpq-dev \
     && apt-get clean \
@@ -25,6 +25,5 @@ COPY . .
 # 7. Exponer el puerto donde corre FastAPI
 EXPOSE 8000
 
-# 8. Comando para arrancar la aplicación
-# Usamos '0.0.0.0' para que sea accesible desde fuera del contenedor
+# 8. Comando para ejecutar la aplicación
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]

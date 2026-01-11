@@ -1,9 +1,8 @@
-version: '3.8'
-
 services:
   # ----------------------------------------------------
-  # CONEXIÓN A POSTGRES PARA GESTIÓN DE BD INTERNA
+  # 1. BASES DE DATOS
   # ----------------------------------------------------
+  # POSTGRESQL
   postgres_service:
     image: postgres:18.1-alpine
     container_name: postgres_db
@@ -22,10 +21,8 @@ services:
       interval: 10s
       retries: 5
 
-  # ----------------------------------------------------
-  # CONEXIÓN A SQL SERVER PARA OBTENER ESQUEMAS DE BD
-  # ----------------------------------------------------
-  sqlserver_target:
+  # SQL SERVER
+  sqlserver_service:
     image: mcr.microsoft.com/mssql/server:2022-latest
     container_name: sql_server_db
     hostname: sqlserver
@@ -40,10 +37,8 @@ services:
     networks:
       - sql_cypher_translator_net
 
-  # ----------------------------------------------------
-  # CONEXIÓN A NEO4J PARA EJECUCIÓN DE CONSULTAS TRADUCIDAS
-  # ----------------------------------------------------
-  neo4j_target:
+  # NEO4J
+  neo4j_service:
     image: neo4j:2025.11.2-community
     container_name: neo4j_db
     ports:
@@ -56,6 +51,33 @@ services:
       - neo4j_data:/data
     networks:
       - sql_cypher_translator_net
+
+
+# ----------------------------------------------------
+# 2. BACKEND
+# ----------------------------------------------------
+  backend_service:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    container_name: translator_backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+    environment:
+      - POSTGRES_SERVER=postgres_service
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+      - SQLSERVER_HOST=sqlserver_service
+      - NEO4J_URI=bolt://neo4j_service:7687
+    depends_on:
+      postgres_service:
+        condition: service_healthy
+    networks:
+      - sql_cypher_translator_net
+
 
 # ----------------------------------------------------
 # Volúmenes y Redes

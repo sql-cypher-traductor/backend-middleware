@@ -23,3 +23,9 @@ exclude = [
     "app/core/parser/generated",
 ]
 line-length = 88
+
+[tool.ruff.lint.per-file-ignores]
+# Ignorar F401 (unused imports) en estos archivos específicos
+"alembic/env.py" = ["F401", "E402"]
+"alembic/versions/*" = ["F401"]
+"app/__init__.py" = ["F401"]
