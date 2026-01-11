@@ -1,0 +1,25 @@
+[tool.black]
+line-length = 88
+target-version = ['py314']
+exclude = '''
+/(
+    \.git
+  | \.venv
+  | __pycache__
+  | app/core/parser/generated  # Ignoramos los archivos autogenerados por ANTLR
+)/
+'''
+
+[tool.ruff]
+# Reglas a activar: E (Error), F (Pyflakes), I (Isort - ordenar imports), B (Bugbear)
+lint.select = ["E", "F", "I", "B"]
+lint.ignore = []
+
+# Excluir carpetas autogeneradas
+exclude = [
+    ".git",
+    ".venv",
+    "__pycache__",
+    "app/core/parser/generated",
+]
+line-length = 88

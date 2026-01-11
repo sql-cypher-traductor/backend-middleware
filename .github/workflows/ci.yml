@@ -1,0 +1,51 @@
+name: Backend CI
+
+# ¿Cuándo se ejecuta?
+on:
+  push:
+    branches: [ "main", "develop" ]
+  pull_request:
+    branches: [ "main", "develop" ]
+
+jobs:
+  quality-check:
+    runs-on: ubuntu-latest
+    
+    steps:
+    # 1. Bajar tu código
+    - uses: actions/checkout@v4
+
+    # 2. Instalar Python
+    - name: Set up Python 3.14
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.14"
+
+    # 3. Instalar dependencias (Cacheado para ser rápido)
+    - name: Cache pip
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        # Instalamos herramientas de calidad (si no están en requirements)
+        pip install black ruff
+
+    # 4. Verificar Formato (Black)
+    - name: Check formatting with Black
+      run: black . --check
+
+    # 5. Verificar Errores y Calidad (Ruff)
+    - name: Lint with Ruff
+      run: ruff check .
+
+    # 6. (Opcional) Correr Tests
+    # Por ahora solo probamos que pytest arranque, aunque no haya tests
+    # - name: Run Tests
+    #   run: pytest

@@ -1,0 +1,70 @@
+version: '3.8'
+
+services:
+  # ----------------------------------------------------
+  # CONEXIÓN A POSTGRES PARA GESTIÓN DE BD INTERNA
+  # ----------------------------------------------------
+  postgres_service:
+    image: postgres:18.1-alpine
+    container_name: postgres_db
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - sql_cypher_translator_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      retries: 5
+
+  # ----------------------------------------------------
+  # CONEXIÓN A SQL SERVER PARA OBTENER ESQUEMAS DE BD
+  # ----------------------------------------------------
+  sqlserver_target:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: sql_server_db
+    hostname: sqlserver
+    ports:
+      - "1433:1433"
+    environment:
+      - ACCEPT_EULA=Y
+      - MSSQL_SA_PASSWORD=${SQL_SERVER_PASSWORD}
+      - MSSQL_PID=Express
+    volumes:
+      - sqlserver_data:/var/opt/mssql
+    networks:
+      - sql_cypher_translator_net
+
+  # ----------------------------------------------------
+  # CONEXIÓN A NEO4J PARA EJECUCIÓN DE CONSULTAS TRADUCIDAS
+  # ----------------------------------------------------
+  neo4j_target:
+    image: neo4j:2025.11.2-community
+    container_name: neo4j_db
+    ports:
+      - "7474:7474" # HTTP Browser
+      - "7687:7687" # Bolt Protocol
+    environment:
+      - NEO4J_AUTH=neo4j/${NEO4J_PASSWORD}
+      - NEO4J_dbms_memory_pagecache_size=512M
+    volumes:
+      - neo4j_data:/data
+    networks:
+      - sql_cypher_translator_net
+
+# ----------------------------------------------------
+# Volúmenes y Redes
+# ----------------------------------------------------
+volumes:
+  postgres_data:
+  sqlserver_data:
+  neo4j_data:
+
+networks:
+  sql_cypher_translator_net:
+    driver: bridge

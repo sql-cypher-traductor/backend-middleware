@@ -1,0 +1,22 @@
+# FastAPI
+fastapi                 # Framework web para construir APIs
+uvicorn[standard]       # Servidor ASGI para FastAPI
+
+# Bases de Datos
+sqlalchemy              # ORM para bases de datos
+alembic                 # Migración de bases de datos
+psycopg2-binary         # Conexión a PostgreSQL
+pyodbc                  # Conexión a SQL Server
+neo4j                   # Conexión a Neo4j
+
+# Variables de entorno
+pydantic-settings       # Gestión de configuraciones
+python-dotenv           # Carga variables de entorno
+
+# Parseo y traducción con ANTLR4
+antlr4-tools            # Genera parsers
+antlr4-python3-runtime  # Ejecución del parser generado
+
+# linters
+black                   # Formateador de código
+ruff                    # Linter para Python
