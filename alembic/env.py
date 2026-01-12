@@ -10,6 +10,7 @@ sys.path.append(os.getcwd())
 
 from app.core.config import settings
 from app.db.base import Base
+from app.models import connection as connection_model  # noqa: F401
 
 # Importar todos los modelos para que Alembic los detecte
 from app.models import password_reset_token, user  # noqa: F401
