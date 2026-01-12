@@ -5,6 +5,10 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.config import settings
 
+# Importar modelos para registrarlos en la metadata de SQLAlchemy
+# Este import es necesario para que Alembic detecte los modelos
+from app.models import Connection, PasswordResetToken, Query, User  # noqa: F401
+
 # Crear el motor de conexión
 engine = create_engine(
     settings.SQLALCHEMY_DATABASE_URI,
