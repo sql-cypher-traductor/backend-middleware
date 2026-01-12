@@ -1,5 +1,7 @@
+from typing import Generator
+
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.config import settings
 
@@ -12,3 +14,16 @@ engine = create_engine(
 
 # Generar una sesión de conexión a la base de datos.
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+
+def get_db() -> Generator[Session, None, None]:
+    """Dependencia para obtener sesión de base de datos.
+
+    Yields:
+        Sesión de SQLAlchemy
+    """
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
