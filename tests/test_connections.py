@@ -731,3 +731,298 @@ def test_encryption_decryption_cycle():
 
     # Verificar que el desencriptado es igual al original
     assert decrypted == original_password
+
+
+# ============================================================================
+# Tests de Prueba de Conexión Existente - CON-01 T24
+# ============================================================================
+
+
+@patch("app.services.connection_service.pyodbc.connect")
+def test_test_existing_sql_server_connection_success(mock_connect, auth_token):
+    """T24: Probar conexión SQL Server existente usando contraseña almacenada."""
+    # Primero crear una conexión
+    create_response = client.post(
+        "/api/v1/connections",
+        json={
+            "conn_name": "Test SQL Existing",
+            "db_type": "sql_server",
+            "host": "localhost",
+            "port": 1433,
+            "db_user": "sa",
+            "db_password": "StoredPassword123!",
+            "database_name": "TestDB",
+        },
+        headers={"Authorization": f"Bearer {auth_token}"},
+    )
+    connection_id = create_response.json()["connection_id"]
+
+    # Mock de la conexión exitosa
+    mock_conn = MagicMock()
+    mock_cursor = MagicMock()
+    mock_cursor.fetchone.return_value = (1,)
+    mock_conn.cursor.return_value = mock_cursor
+    mock_connect.return_value = mock_conn
+
+    # Probar la conexión existente (sin proporcionar contraseña)
+    response = client.post(
+        f"/api/v1/connections/{connection_id}/test",
+        headers={"Authorization": f"Bearer {auth_token}"},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["success"] is True
+    assert "connection_time_ms" in data
+
+
+@patch("app.services.connection_service.GraphDatabase.driver")
+def test_test_existing_neo4j_connection_success(mock_driver, auth_token):
+    """T24: Probar conexión Neo4j existente usando contraseña almacenada."""
+    # Primero crear una conexión
+    create_response = client.post(
+        "/api/v1/connections",
+        json={
+            "conn_name": "Test Neo4j Existing",
+            "db_type": "neo4j",
+            "host": "localhost",
+            "port": 7687,
+            "db_user": "neo4j",
+            "db_password": "StoredNeo4jPass!",
+        },
+        headers={"Authorization": f"Bearer {auth_token}"},
+    )
+    connection_id = create_response.json()["connection_id"]
+
+    # Mock de la conexión exitosa
+    mock_driver_instance = MagicMock()
+    mock_driver.return_value = mock_driver_instance
+
+    # Probar la conexión existente
+    response = client.post(
+        f"/api/v1/connections/{connection_id}/test",
+        headers={"Authorization": f"Bearer {auth_token}"},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["success"] is True
+
+
+def test_test_existing_connection_not_found(auth_token):
+    """T24: Error 404 al probar conexión inexistente."""
+    response = client.post(
+        "/api/v1/connections/99999/test",
+        headers={"Authorization": f"Bearer {auth_token}"},
+    )
+
+    assert response.status_code == 404
+
+
+def test_test_existing_connection_forbidden(auth_token, auth_token_second_user):
+    """T24: Error 403 al probar conexión de otro usuario."""
+    # Usuario 1 crea conexión
+    create_response = client.post(
+        "/api/v1/connections",
+        json={
+            "conn_name": "User 1 Connection Test",
+            "db_type": "sql_server",
+            "host": "localhost",
+            "port": 1433,
+            "db_user": "sa",
+            "db_password": "Password123!",
+            "database_name": "TestDB",
+        },
+        headers={"Authorization": f"Bearer {auth_token}"},
+    )
+    connection_id = create_response.json()["connection_id"]
+
+    # Usuario 2 intenta probar
+    response = client.post(
+        f"/api/v1/connections/{connection_id}/test",
+        headers={"Authorization": f"Bearer {auth_token_second_user}"},
+    )
+
+    assert response.status_code == 403
+
+
+def test_test_existing_connection_requires_auth():
+    """T24: Probar conexión existente requiere autenticación."""
+    response = client.post("/api/v1/connections/1/test")
+    assert response.status_code == 401
+
+
+# ============================================================================
+# Tests de Obtener Esquema de Base de Datos - CON-01 Criterio de Aceptación
+# ============================================================================
+
+
+@patch("app.services.connection_service.pyodbc.connect")
+def test_get_database_schema_success(mock_connect, auth_token):
+    """CON-01: Obtener esquema de BD SQL Server exitosamente."""
+    # Primero crear una conexión SQL Server
+    create_response = client.post(
+        "/api/v1/connections",
+        json={
+            "conn_name": "Schema Test SQL",
+            "db_type": "sql_server",
+            "host": "localhost",
+            "port": 1433,
+            "db_user": "sa",
+            "db_password": "Password123!",
+            "database_name": "TestDB",
+        },
+        headers={"Authorization": f"Bearer {auth_token}"},
+    )
+    connection_id = create_response.json()["connection_id"]
+
+    # Mock de la conexión y consultas
+    mock_conn = MagicMock()
+    mock_cursor = MagicMock()
+
+    # Mock de tablas
+    mock_cursor.fetchall.side_effect = [
+        # Tablas
+        [("dbo", "Users", 100), ("dbo", "Orders", 500)],
+        # Columnas
+        [
+            (
+                "dbo",
+                "Users",
+                "user_id",
+                "int",
+                "NO",
+                None,
+                None,
+                1,
+                None,
+                None,
+            ),
+            (
+                "dbo",
+                "Users",
+                "email",
+                "varchar",
+                "NO",
+                255,
+                None,
+                0,
+                None,
+                None,
+            ),
+            (
+                "dbo",
+                "Orders",
+                "order_id",
+                "int",
+                "NO",
+                None,
+                None,
+                1,
+                None,
+                None,
+            ),
+            (
+                "dbo",
+                "Orders",
+                "user_id",
+                "int",
+                "NO",
+                None,
+                None,
+                0,
+                "Users",
+                "user_id",
+            ),
+        ],
+        # Relaciones
+        [("FK_Orders_Users", "Orders", "user_id", "Users", "user_id")],
+    ]
+
+    mock_conn.cursor.return_value = mock_cursor
+    mock_connect.return_value = mock_conn
+
+    # Obtener esquema
+    response = client.get(
+        f"/api/v1/connections/{connection_id}/schema",
+        headers={"Authorization": f"Bearer {auth_token}"},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["database_name"] == "TestDB"
+    assert "tables" in data
+    assert "relationships" in data
+    assert "retrieved_at" in data
+    assert len(data["tables"]) == 2
+    assert len(data["relationships"]) == 1
+
+
+def test_get_schema_neo4j_not_supported(auth_token):
+    """CON-01: Obtener esquema no soportado para Neo4j."""
+    # Crear conexión Neo4j
+    create_response = client.post(
+        "/api/v1/connections",
+        json={
+            "conn_name": "Schema Test Neo4j",
+            "db_type": "neo4j",
+            "host": "localhost",
+            "port": 7687,
+            "db_user": "neo4j",
+            "db_password": "password",
+        },
+        headers={"Authorization": f"Bearer {auth_token}"},
+    )
+    connection_id = create_response.json()["connection_id"]
+
+    # Intentar obtener esquema
+    response = client.get(
+        f"/api/v1/connections/{connection_id}/schema",
+        headers={"Authorization": f"Bearer {auth_token}"},
+    )
+
+    assert response.status_code == 400
+    assert "SQL Server" in response.json()["detail"]
+
+
+def test_get_schema_not_found(auth_token):
+    """CON-01: Error 404 al obtener esquema de conexión inexistente."""
+    response = client.get(
+        "/api/v1/connections/99999/schema",
+        headers={"Authorization": f"Bearer {auth_token}"},
+    )
+
+    assert response.status_code == 404
+
+
+def test_get_schema_forbidden(auth_token, auth_token_second_user):
+    """CON-01: Error 403 al obtener esquema de conexión de otro usuario."""
+    # Usuario 1 crea conexión
+    create_response = client.post(
+        "/api/v1/connections",
+        json={
+            "conn_name": "User 1 Schema Test",
+            "db_type": "sql_server",
+            "host": "localhost",
+            "port": 1433,
+            "db_user": "sa",
+            "db_password": "Password123!",
+            "database_name": "TestDB",
+        },
+        headers={"Authorization": f"Bearer {auth_token}"},
+    )
+    connection_id = create_response.json()["connection_id"]
+
+    # Usuario 2 intenta obtener esquema
+    response = client.get(
+        f"/api/v1/connections/{connection_id}/schema",
+        headers={"Authorization": f"Bearer {auth_token_second_user}"},
+    )
+
+    assert response.status_code == 403
+
+
+def test_get_schema_requires_auth():
+    """CON-01: Obtener esquema requiere autenticación."""
+    response = client.get("/api/v1/connections/1/schema")
+    assert response.status_code == 401

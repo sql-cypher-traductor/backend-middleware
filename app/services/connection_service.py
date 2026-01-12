@@ -1,6 +1,8 @@
 """Servicio para gestionar conexiones a bases de datos externas."""
 
+import logging
 import time
+from datetime import datetime, timezone
 from typing import List
 
 import pyodbc
@@ -16,11 +18,17 @@ from app.core.exceptions import (
 from app.core.security import decrypt_data, encrypt_data
 from app.models.connection import Connection, DatabaseType
 from app.schemas.connection import (
+    ColumnInfo,
     ConnectionCreate,
     ConnectionTestRequest,
     ConnectionTestResponse,
     ConnectionUpdate,
+    DatabaseSchemaResponse,
+    RelationshipInfo,
+    TableInfo,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class ConnectionService:
@@ -212,16 +220,20 @@ class ConnectionService:
             Resultado de la prueba de conexión
         """
         start_time = time.time()
+        logger.info(
+            f"Intentando conexión SQL Server: {host}:{port}/{database} como {user}"
+        )
 
         try:
             # Construir cadena de conexión ODBC
-            # Usar DRIVER={ODBC Driver 17 for SQL Server} o el disponible
+            # Usar DRIVER={ODBC Driver 18 for SQL Server} instalado en Docker
             connection_string = (
-                f"DRIVER={{ODBC Driver 17 for SQL Server}};"
+                f"DRIVER={{ODBC Driver 18 for SQL Server}};"
                 f"SERVER={host},{port};"
                 f"DATABASE={database};"
                 f"UID={user};"
                 f"PWD={password};"
+                f"TrustServerCertificate=yes;"
                 f"Connection Timeout=5;"
             )
 
@@ -248,6 +260,8 @@ class ConnectionService:
         except pyodbc.Error as e:
             elapsed_ms = (time.time() - start_time) * 1000
             error_msg = str(e)
+            # Log del error completo para diagnóstico
+            logger.error(f"Error de conexión SQL Server: {error_msg}")
             # Sanitizar mensaje de error para no exponer información sensible
             safe_msg = "Error de conexión a SQL Server"
             if "login failed" in error_msg.lower():
@@ -255,10 +269,20 @@ class ConnectionService:
             elif (
                 "server not found" in error_msg.lower()
                 or "network" in error_msg.lower()
+                or "could not open a connection" in error_msg.lower()
             ):
-                safe_msg = "No se puede alcanzar el servidor"
+                # Sugerencia si está usando localhost
+                if host.lower() in ("localhost", "127.0.0.1"):
+                    safe_msg = (
+                        "No se puede alcanzar el servidor. "
+                        "Si estás en Docker, usa 'sqlserver_service' como host"
+                    )
+                else:
+                    safe_msg = "No se puede alcanzar el servidor"
             elif "timeout" in error_msg.lower():
                 safe_msg = "Tiempo de espera agotado"
+            elif "driver" in error_msg.lower():
+                safe_msg = "Driver ODBC no encontrado"
 
             return ConnectionTestResponse(
                 success=False,
@@ -267,6 +291,9 @@ class ConnectionService:
             )
         except Exception as e:
             elapsed_ms = (time.time() - start_time) * 1000
+            logger.error(
+                f"Error inesperado en conexión SQL Server: {type(e).__name__}: {str(e)}"
+            )
             return ConnectionTestResponse(
                 success=False,
                 message=f"Error inesperado: {type(e).__name__}",
@@ -393,4 +420,246 @@ class ConnectionService:
         except Exception as e:
             raise DatabaseConnectionError(
                 f"Error al obtener contraseña: {str(e)}"
+            ) from e
+
+    @staticmethod
+    def test_existing_connection(
+        db: Session, connection_id: int, user_id: int
+    ) -> ConnectionTestResponse:
+        """Prueba una conexión existente usando la contraseña almacenada.
+
+        Args:
+            db: Sesión de base de datos
+            connection_id: ID de la conexión a probar
+            user_id: ID del usuario (para validar ownership)
+
+        Returns:
+            Resultado de la prueba de conexión
+
+        Raises:
+            NotFoundError: Si la conexión no existe
+            ForbiddenError: Si el usuario no es el propietario
+        """
+        connection = ConnectionService.get_connection(db, connection_id, user_id)
+
+        # Desencriptar la contraseña almacenada
+        decrypted_password = ConnectionService.get_decrypted_password(connection)
+
+        if connection.db_type == DatabaseType.SQL_SERVER:
+            return ConnectionService.test_sql_server_connection(
+                host=connection.host,
+                port=connection.port,
+                user=connection.db_user,
+                password=decrypted_password,
+                database=connection.database_name or "",
+            )
+        elif connection.db_type == DatabaseType.NEO4J:
+            return ConnectionService.test_neo4j_connection(
+                host=connection.host,
+                port=connection.port,
+                user=connection.db_user,
+                password=decrypted_password,
+            )
+        else:
+            raise ValidationError(
+                f"Tipo de base de datos no soportado: {connection.db_type}"
+            )
+
+    @staticmethod
+    def get_sql_server_schema(
+        db: Session, connection_id: int, user_id: int
+    ) -> DatabaseSchemaResponse:
+        """Obtiene el esquema de una base de datos SQL Server.
+
+        Incluye tablas, columnas, tipos de datos y relaciones FK.
+
+        Args:
+            db: Sesión de base de datos
+            connection_id: ID de la conexión
+            user_id: ID del usuario (para validar ownership)
+
+        Returns:
+            Esquema completo de la base de datos
+
+        Raises:
+            NotFoundError: Si la conexión no existe
+            ForbiddenError: Si el usuario no es el propietario
+            ValidationError: Si no es una conexión SQL Server
+            DatabaseConnectionError: Si no se puede conectar
+        """
+        connection = ConnectionService.get_connection(db, connection_id, user_id)
+
+        if connection.db_type != DatabaseType.SQL_SERVER:
+            raise ValidationError(
+                "Solo se puede obtener el esquema de conexiones SQL Server"
+            )
+
+        # Desencriptar la contraseña almacenada
+        decrypted_password = ConnectionService.get_decrypted_password(connection)
+
+        try:
+            # Construir cadena de conexión
+            connection_string = (
+                f"DRIVER={{ODBC Driver 18 for SQL Server}};"
+                f"SERVER={connection.host},{connection.port};"
+                f"DATABASE={connection.database_name};"
+                f"UID={connection.db_user};"
+                f"PWD={decrypted_password};"
+                f"TrustServerCertificate=yes;"
+                f"Connection Timeout=10;"
+            )
+
+            conn = pyodbc.connect(connection_string, timeout=10)
+            cursor = conn.cursor()
+
+            # Obtener tablas
+            tables_query = """
+                SELECT 
+                    t.TABLE_SCHEMA,
+                    t.TABLE_NAME,
+                    (SELECT SUM(p.rows) 
+                     FROM sys.partitions p
+                     JOIN sys.tables st ON p.object_id = st.object_id
+                     WHERE st.name = t.TABLE_NAME 
+                       AND p.index_id IN (0, 1)) as row_count
+                FROM INFORMATION_SCHEMA.TABLES t
+                WHERE t.TABLE_TYPE = 'BASE TABLE'
+                ORDER BY t.TABLE_SCHEMA, t.TABLE_NAME
+            """
+            cursor.execute(tables_query)
+            tables_rows = cursor.fetchall()
+
+            # Obtener columnas con información de PKs y FKs
+            columns_query = """
+                SELECT 
+                    c.TABLE_SCHEMA,
+                    c.TABLE_NAME,
+                    c.COLUMN_NAME,
+                    c.DATA_TYPE,
+                    c.IS_NULLABLE,
+                    c.CHARACTER_MAXIMUM_LENGTH,
+                    c.COLUMN_DEFAULT,
+                    CASE WHEN pk.COLUMN_NAME IS NOT NULL THEN 1 ELSE 0 END as is_pk,
+                    fk.REFERENCED_TABLE_NAME,
+                    fk.REFERENCED_COLUMN_NAME
+                FROM INFORMATION_SCHEMA.COLUMNS c
+                LEFT JOIN (
+                    SELECT ku.TABLE_SCHEMA, ku.TABLE_NAME, ku.COLUMN_NAME
+                    FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
+                    JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE ku
+                        ON tc.CONSTRAINT_NAME = ku.CONSTRAINT_NAME
+                    WHERE tc.CONSTRAINT_TYPE = 'PRIMARY KEY'
+                ) pk ON c.TABLE_SCHEMA = pk.TABLE_SCHEMA 
+                    AND c.TABLE_NAME = pk.TABLE_NAME 
+                    AND c.COLUMN_NAME = pk.COLUMN_NAME
+                LEFT JOIN (
+                    SELECT 
+                        cu.TABLE_SCHEMA,
+                        cu.TABLE_NAME,
+                        cu.COLUMN_NAME,
+                        ku2.TABLE_NAME as REFERENCED_TABLE_NAME,
+                        ku2.COLUMN_NAME as REFERENCED_COLUMN_NAME
+                    FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS rc
+                    JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE cu
+                        ON rc.CONSTRAINT_NAME = cu.CONSTRAINT_NAME
+                    JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE ku2
+                        ON rc.UNIQUE_CONSTRAINT_NAME = ku2.CONSTRAINT_NAME
+                ) fk ON c.TABLE_SCHEMA = fk.TABLE_SCHEMA 
+                    AND c.TABLE_NAME = fk.TABLE_NAME 
+                    AND c.COLUMN_NAME = fk.COLUMN_NAME
+                ORDER BY c.TABLE_SCHEMA, c.TABLE_NAME, c.ORDINAL_POSITION
+            """
+            cursor.execute(columns_query)
+            columns_rows = cursor.fetchall()
+
+            # Obtener relaciones (FKs)
+            relationships_query = """
+                SELECT 
+                    rc.CONSTRAINT_NAME,
+                    cu.TABLE_NAME as SOURCE_TABLE,
+                    cu.COLUMN_NAME as SOURCE_COLUMN,
+                    ku.TABLE_NAME as TARGET_TABLE,
+                    ku.COLUMN_NAME as TARGET_COLUMN
+                FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS rc
+                JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE cu
+                    ON rc.CONSTRAINT_NAME = cu.CONSTRAINT_NAME
+                JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE ku
+                    ON rc.UNIQUE_CONSTRAINT_NAME = ku.CONSTRAINT_NAME
+                ORDER BY rc.CONSTRAINT_NAME
+            """
+            cursor.execute(relationships_query)
+            relationships_rows = cursor.fetchall()
+
+            cursor.close()
+            conn.close()
+
+            # Procesar datos
+            # Crear diccionario de columnas por tabla
+            columns_by_table: dict = {}
+            for row in columns_rows:
+                table_key = f"{row[0]}.{row[1]}"  # schema.table
+                if table_key not in columns_by_table:
+                    columns_by_table[table_key] = []
+
+                columns_by_table[table_key].append(
+                    ColumnInfo(
+                        name=row[2],
+                        data_type=row[3],
+                        is_nullable=row[4] == "YES",
+                        max_length=row[5],
+                        default_value=row[6],
+                        is_primary_key=bool(row[7]),
+                        is_foreign_key=row[8] is not None,
+                        referenced_table=row[8],
+                        referenced_column=row[9],
+                    )
+                )
+
+            # Crear lista de tablas
+            tables = []
+            for row in tables_rows:
+                table_key = f"{row[0]}.{row[1]}"
+                tables.append(
+                    TableInfo(
+                        schema_name=row[0],
+                        name=row[1],
+                        row_count=row[2],
+                        columns=columns_by_table.get(table_key, []),
+                    )
+                )
+
+            # Crear lista de relaciones
+            relationships = []
+            for row in relationships_rows:
+                relationships.append(
+                    RelationshipInfo(
+                        name=row[0],
+                        source_table=row[1],
+                        source_column=row[2],
+                        target_table=row[3],
+                        target_column=row[4],
+                    )
+                )
+
+            return DatabaseSchemaResponse(
+                database_name=connection.database_name or "",
+                tables=tables,
+                relationships=relationships,
+                retrieved_at=datetime.now(timezone.utc),
+            )
+
+        except pyodbc.Error as e:
+            error_msg = str(e).lower()
+            safe_msg = "Error al obtener el esquema de la base de datos"
+            if "login failed" in error_msg:
+                safe_msg = "Credenciales inválidas"
+            elif "server not found" in error_msg or "network" in error_msg:
+                safe_msg = "No se puede alcanzar el servidor"
+            elif "timeout" in error_msg:
+                safe_msg = "Tiempo de espera agotado"
+
+            raise DatabaseConnectionError(safe_msg) from e
+        except Exception as e:
+            raise DatabaseConnectionError(
+                f"Error inesperado: {type(e).__name__}"
             ) from e

@@ -172,3 +172,62 @@ class ConnectionTestResponse(BaseModel):
     connection_time_ms: Optional[float] = Field(
         None, description="Tiempo de conexión en milisegundos"
     )
+
+
+# ============================================================================
+# Schemas para Esquema de Base de Datos - CON-01 Criterio de Aceptación
+# ============================================================================
+
+
+class ColumnInfo(BaseModel):
+    """Información de una columna de tabla SQL Server."""
+
+    name: str = Field(..., description="Nombre de la columna")
+    data_type: str = Field(..., description="Tipo de dato SQL")
+    is_nullable: bool = Field(..., description="Si permite valores NULL")
+    is_primary_key: bool = Field(
+        default=False, description="Si es parte de la clave primaria"
+    )
+    is_foreign_key: bool = Field(default=False, description="Si es clave foránea")
+    max_length: Optional[int] = Field(
+        None, description="Longitud máxima para tipos de texto"
+    )
+    default_value: Optional[str] = Field(None, description="Valor por defecto")
+    referenced_table: Optional[str] = Field(
+        None, description="Tabla referenciada si es FK"
+    )
+    referenced_column: Optional[str] = Field(
+        None, description="Columna referenciada si es FK"
+    )
+
+
+class TableInfo(BaseModel):
+    """Información de una tabla SQL Server."""
+
+    name: str = Field(..., description="Nombre de la tabla")
+    schema_name: str = Field(default="dbo", description="Esquema de la tabla")
+    columns: list[ColumnInfo] = Field(
+        default_factory=list, description="Lista de columnas"
+    )
+    row_count: Optional[int] = Field(None, description="Número aproximado de filas")
+
+
+class RelationshipInfo(BaseModel):
+    """Información de una relación/FK entre tablas."""
+
+    name: str = Field(..., description="Nombre de la restricción FK")
+    source_table: str = Field(..., description="Tabla origen")
+    source_column: str = Field(..., description="Columna origen")
+    target_table: str = Field(..., description="Tabla destino")
+    target_column: str = Field(..., description="Columna destino")
+
+
+class DatabaseSchemaResponse(BaseModel):
+    """Respuesta con el esquema completo de la base de datos SQL Server."""
+
+    database_name: str = Field(..., description="Nombre de la base de datos")
+    tables: list[TableInfo] = Field(default_factory=list, description="Lista de tablas")
+    relationships: list[RelationshipInfo] = Field(
+        default_factory=list, description="Lista de relaciones FK"
+    )
+    retrieved_at: datetime = Field(..., description="Fecha y hora de la consulta")

@@ -14,6 +14,7 @@ from app.schemas.connection import (
     ConnectionTestRequest,
     ConnectionTestResponse,
     ConnectionUpdate,
+    DatabaseSchemaResponse,
 )
 from app.services.connection_service import ConnectionService
 
@@ -192,3 +193,77 @@ def delete_connection(
         403: Si el usuario no es el propietario
     """
     ConnectionService.delete_connection(db, connection_id, current_user.user_id)
+
+
+@router.post(
+    "/{connection_id}/test",
+    response_model=ConnectionTestResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Probar conexión existente",
+    description=(
+        "Prueba la conectividad de una conexión existente "
+        "usando las credenciales almacenadas (encriptadas)."
+    ),
+)
+def test_existing_connection(
+    connection_id: int,
+    db: Session = Depends(get_db),  # noqa: B008
+    current_user: User = Depends(get_current_user),  # noqa: B008
+) -> ConnectionTestResponse:
+    """Prueba una conexión existente sin necesidad de proporcionar credenciales.
+
+    Usa la contraseña encriptada almacenada en la base de datos.
+
+    Args:
+        connection_id: ID de la conexión a probar
+
+    Returns:
+        Resultado de la prueba con mensaje y tiempo de respuesta
+
+    Raises:
+        404: Si la conexión no existe
+        403: Si el usuario no es el propietario
+    """
+    return ConnectionService.test_existing_connection(
+        db, connection_id, current_user.user_id
+    )
+
+
+@router.get(
+    "/{connection_id}/schema",
+    response_model=DatabaseSchemaResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Obtener esquema de base de datos",
+    description=(
+        "Obtiene el esquema completo de una base de datos SQL Server, "
+        "incluyendo tablas, columnas, tipos de datos y relaciones."
+    ),
+)
+def get_database_schema(
+    connection_id: int,
+    db: Session = Depends(get_db),  # noqa: B008
+    current_user: User = Depends(get_current_user),  # noqa: B008
+) -> DatabaseSchemaResponse:
+    """Obtiene el esquema de la base de datos SQL Server conectada.
+
+    Solo disponible para conexiones de tipo SQL Server.
+    Incluye:
+    - Lista de tablas con sus esquemas
+    - Columnas con tipos de datos, PKs, FKs
+    - Relaciones entre tablas
+
+    Args:
+        connection_id: ID de la conexión SQL Server
+
+    Returns:
+        Esquema completo de la base de datos
+
+    Raises:
+        404: Si la conexión no existe
+        403: Si el usuario no es el propietario
+        400: Si la conexión no es de tipo SQL Server
+        500: Si hay error de conectividad
+    """
+    return ConnectionService.get_sql_server_schema(
+        db, connection_id, current_user.user_id
+    )
