@@ -29,3 +29,9 @@ line-length = 88
 "alembic/env.py" = ["F401", "E402"]
 "alembic/versions/*" = ["F401"]
 "app/__init__.py" = ["F401"]
+
+
+[tool.pytest.ini_options]
+pythonpath = "."
+testpaths = ["tests"]
+addopts = "-v"

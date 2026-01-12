@@ -46,4 +46,11 @@ jobs:
 
     # 6. Validar Pruebas Unitarias (Pytest)
     - name: Run Unit Tests
+      env:
+        POSTGRES_USER: test_user
+        POSTGRES_PASSWORD: test_password
+        POSTGRES_SERVER: localhost
+        POSTGRES_DB: test_db
+        SECRET_KEY: test_secret_key
+        ALGORITHM: HS256
       run: pytest

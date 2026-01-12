@@ -17,6 +17,13 @@ class Settings(BaseSettings):
     POSTGRES_SERVER: str = os.getenv("POSTGRES_SERVER")
     POSTGRES_DB: str = os.getenv("POSTGRES_DB")
 
+    # JWT Configuration
+    SECRET_KEY: str = os.getenv("SECRET_KEY")
+    ALGORITHM: str = os.getenv("ALGORITHM", "HS256")
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = int(
+        os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30")
+    )
+
     @property
     def SQLALCHEMY_DATABASE_URI(self) -> str:
         # Construye la URL de conexión a PostgreSQL: postgresql://user:pass@localhost:5432/db
