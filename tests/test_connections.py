@@ -15,46 +15,11 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
 from app.core.security import decrypt_data, encrypt_data
-from app.db.base import Base
-from app.db.session import get_db
 from app.main import app
 
-# Base de datos en memoria para tests
-SQLALCHEMY_DATABASE_URL = "sqlite:///:memory:"
-
-engine = create_engine(
-    SQLALCHEMY_DATABASE_URL,
-    connect_args={"check_same_thread": False},
-    poolclass=StaticPool,
-)
-TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-
-def override_get_db():
-    """Override de la dependencia de base de datos para tests."""
-    try:
-        db = TestingSessionLocal()
-        yield db
-    finally:
-        db.close()
-
-
-app.dependency_overrides[get_db] = override_get_db
-
 client = TestClient(app)
-
-
-@pytest.fixture(autouse=True)
-def setup_database():
-    """Crea las tablas antes de cada test y las elimina después."""
-    Base.metadata.create_all(bind=engine)
-    yield
-    Base.metadata.drop_all(bind=engine)
 
 
 @pytest.fixture
@@ -312,7 +277,7 @@ def test_create_connection_requires_auth():
     assert response.status_code == 401  # 401 Unauthorized cuando no hay token
 
 
-def test_password_encryption_in_database(auth_token):
+def test_password_encryption_in_database(auth_token, db):
     """T23: Verificar que las contraseñas se encriptan en la BD."""
     # Crear conexión
     response = client.post(
@@ -334,7 +299,6 @@ def test_password_encryption_in_database(auth_token):
     # Verificar en la base de datos que la contraseña está encriptada
     from app.models.connection import Connection
 
-    db = next(override_get_db())
     connection = db.query(Connection).first()
 
     # La contraseña almacenada no debe ser el texto plano
@@ -554,7 +518,7 @@ def test_update_connection_success(auth_token):
     assert data["db_user"] == "sa"
 
 
-def test_update_connection_password_encryption(auth_token):
+def test_update_connection_password_encryption(auth_token, db):
     """T29: Al actualizar contraseña, debe encriptarse."""
     # Crear conexión
     create_response = client.post(
@@ -585,7 +549,6 @@ def test_update_connection_password_encryption(auth_token):
     # Verificar encriptación en BD
     from app.models.connection import Connection
 
-    db = next(override_get_db())
     connection = (
         db.query(Connection).filter(Connection.connection_id == connection_id).first()
     )

@@ -11,46 +11,11 @@ Cubre:
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
-from app.db.base import Base
-from app.db.session import get_db
 from app.main import app
-from app.models.password_reset_token import PasswordResetToken
-
-# Base de datos en memoria para tests
-SQLALCHEMY_DATABASE_URL = "sqlite:///:memory:"
-
-engine = create_engine(
-    SQLALCHEMY_DATABASE_URL,
-    connect_args={"check_same_thread": False},
-    poolclass=StaticPool,
-)
-TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-
-def override_get_db():
-    """Override de la dependencia de base de datos para tests."""
-    try:
-        db = TestingSessionLocal()
-        yield db
-    finally:
-        db.close()
-
-
-app.dependency_overrides[get_db] = override_get_db
+from app.models.password_reset_token import PasswordResetToken  # noqa: F401
 
 client = TestClient(app)
-
-
-@pytest.fixture(autouse=True)
-def setup_database():
-    """Crea las tablas antes de cada test y las elimina después."""
-    Base.metadata.create_all(bind=engine)
-    yield
-    Base.metadata.drop_all(bind=engine)
 
 
 # ============================================================================
@@ -553,7 +518,7 @@ def test_forgot_password_invalid_email():
 
 
 @pytest.mark.skip(reason="Requiere PostgreSQL con timezone awareness.")
-def test_reset_password_with_valid_token():
+def test_reset_password_with_valid_token(db):
     """T14: Reset de contraseña con token válido."""
     # Registrar usuario
     client.post(
@@ -570,7 +535,6 @@ def test_reset_password_with_valid_token():
     client.post("/api/v1/auth/forgot-password", json={"email": "reset@example.com"})
 
     # Obtener token de la BD
-    db = TestingSessionLocal()
     reset_token = db.query(PasswordResetToken).filter_by(user_id=1).first()
 
     if reset_token:
@@ -636,13 +600,13 @@ def test_reset_password_weak_password():
 
 
 @pytest.mark.skip(reason="Requiere PostgreSQL con timezone awareness.")
-def test_reset_password_token_used_twice():
-    """T14: Token solo puede usarse una vez."""
+def test_reset_password_token_used_twice(db):
+    """T14: Token no puede reutilizarse después de ser usado."""
     # Registrar usuario
     client.post(
         "/api/v1/auth/register",
         json={
-            "email": "oneuse@example.com",
+            "email": "reuse@example.com",
             "password": "Original@2024!",
             "name": "User",
             "last_name": "Test",
@@ -650,10 +614,9 @@ def test_reset_password_token_used_twice():
     )
 
     # Solicitar token
-    client.post("/api/v1/auth/forgot-password", json={"email": "oneuse@example.com"})
+    client.post("/api/v1/auth/forgot-password", json={"email": "reuse@example.com"})
 
     # Obtener token
-    db = TestingSessionLocal()
     reset_token = db.query(PasswordResetToken).filter_by(user_id=1).first()
 
     if reset_token:
@@ -690,7 +653,7 @@ def test_reset_password_token_used_twice():
 @pytest.mark.skip(
     reason="Requiere PostgreSQL con timezone awareness. SQLite no soporta."
 )
-def test_login_after_password_reset():
+def test_login_after_password_reset(db):
     """T14: Login con nueva contraseña después de reset."""
     # Registrar usuario
     client.post(
@@ -708,7 +671,6 @@ def test_login_after_password_reset():
         "/api/v1/auth/forgot-password", json={"email": "loginafter@example.com"}
     )
 
-    db = TestingSessionLocal()
     reset_token = db.query(PasswordResetToken).filter_by(user_id=1).first()
 
     if reset_token:
