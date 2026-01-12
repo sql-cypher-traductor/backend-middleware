@@ -13,6 +13,15 @@ neo4j                   # Conexión a Neo4j
 pydantic-settings       # Gestión de configuraciones
 python-dotenv           # Carga variables de entorno
 
+# Seguridad y Autenticación
+bcrypt==4.1.2           # Librería de hash bcrypt (versión compatible)
+passlib==1.7.4          # Hash de contraseñas
+python-jose[cryptography]  # JWT tokens
+python-multipart        # Soporte para form data
+
+# Uso de emails
+email-validator         # Validación de direcciones de email
+
 # Parseo y traducción con ANTLR4
 antlr4-tools            # Genera parsers
 antlr4-python3-runtime  # Ejecución del parser generado
@@ -22,5 +31,6 @@ black                   # Formateador de código
 ruff                    # Linter para Python
 
 # Testing
-pytest                 # Framework de testing
+pytest                 # Framework para testing
+pytest-cov             # Cobertura de código para tests
 httpx                  # Cliente HTTP para testing de APIs
