@@ -42,8 +42,9 @@ class Connection(Base):
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
 
-    # Relación con el usuario
+    # Relaciones
     user = relationship("User", backref="connections")
+    queries = relationship("Query", back_populates="connection")
 
     def __repr__(self) -> str:
         return (
