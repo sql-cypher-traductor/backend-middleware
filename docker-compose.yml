@@ -78,6 +78,22 @@ services:
     networks:
       - sql_cypher_translator_net
 
+# ----------------------------------------------------
+# 3. FRONTEND
+# ----------------------------------------------------
+  frontend_service:
+    build:
+      context: ../frontend-middleware
+      dockerfile: Dockerfile
+    container_name: translator_frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://backend_service:8000/api/v1
+    depends_on:
+      - backend_service
+    networks:
+      - sql_cypher_translator_net
 
 # ----------------------------------------------------
 # Volúmenes y Redes

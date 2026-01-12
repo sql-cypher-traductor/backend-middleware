@@ -1,6 +1,6 @@
 name: Backend CI
 
-# ¿Cuándo se ejecuta?
+# Configuración de ramas de ejecución
 on:
   push:
     branches: [ "main", "develop" ]
@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
-    # 1. Bajar tu código
+    # 1. Descargar el código
     - uses: actions/checkout@v4
 
     # 2. Instalar Python
@@ -21,7 +21,7 @@ jobs:
       with:
         python-version: "3.14"
 
-    # 3. Instalar dependencias (Cacheado para ser rápido)
+    # 3. Instalar dependencias
     - name: Cache pip
       uses: actions/cache@v3
       with:
