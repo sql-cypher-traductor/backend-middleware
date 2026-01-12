@@ -20,3 +20,7 @@ antlr4-python3-runtime  # Ejecución del parser generado
 # linters
 black                   # Formateador de código
 ruff                    # Linter para Python
+
+# Testing
+pytest                 # Framework de testing
+httpx                  # Cliente HTTP para testing de APIs
