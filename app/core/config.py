@@ -18,10 +18,11 @@ class Settings(BaseSettings):
     POSTGRES_DB: str = os.getenv("POSTGRES_DB")
 
     # JWT Configuration
+    # HU AUM-01 T02: Token JWT con expiración de 24 horas por defecto (1440 minutos)
     SECRET_KEY: str = os.getenv("SECRET_KEY")
     ALGORITHM: str = os.getenv("ALGORITHM", "HS256")
     ACCESS_TOKEN_EXPIRE_MINUTES: int = int(
-        os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30")
+        os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "1440")  # 24 horas por defecto
     )
 
     @property
