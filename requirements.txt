@@ -17,6 +17,7 @@ python-dotenv           # Carga variables de entorno
 bcrypt==4.1.2           # Librería de hash bcrypt (versión compatible)
 passlib==1.7.4          # Hash de contraseñas
 python-jose[cryptography]  # JWT tokens
+cryptography            # Encriptación de datos sensibles (Fernet)
 python-multipart        # Soporte para form data
 
 # Uso de emails

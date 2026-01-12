@@ -2,6 +2,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 import bcrypt
+from cryptography.fernet import Fernet
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
@@ -13,6 +14,62 @@ from app.models.user import User, UserRole
 
 # Configuración de seguridad Bearer Token
 security = HTTPBearer()
+
+# Instancia de Fernet para encriptación de datos sensibles
+# Usa la SECRET_KEY del settings (debe ser de 32 bytes en base64)
+_fernet = None
+
+
+def get_fernet() -> Fernet:
+    """Obtiene o crea la instancia de Fernet para encriptación."""
+    global _fernet
+    if _fernet is None:
+        # Derivar una clave de 32 bytes desde la SECRET_KEY
+        import base64
+        import hashlib
+
+        key_bytes = hashlib.sha256(settings.SECRET_KEY.encode()).digest()
+        key_b64 = base64.urlsafe_b64encode(key_bytes)
+        _fernet = Fernet(key_b64)
+    return _fernet
+
+
+def encrypt_data(data: str) -> str:
+    """Encripta datos sensibles usando Fernet (AES-128).
+
+    Args:
+        data: Texto a encriptar
+
+    Returns:
+        Texto encriptado en base64
+    """
+    if not data:
+        return ""
+    fernet = get_fernet()
+    encrypted = fernet.encrypt(data.encode("utf-8"))
+    return encrypted.decode("utf-8")
+
+
+def decrypt_data(encrypted_data: str) -> str:
+    """Desencripta datos sensibles usando Fernet.
+
+    Args:
+        encrypted_data: Texto encriptado en base64
+
+    Returns:
+        Texto desencriptado
+
+    Raises:
+        ValueError: Si no se puede desencriptar
+    """
+    if not encrypted_data:
+        return ""
+    try:
+        fernet = get_fernet()
+        decrypted = fernet.decrypt(encrypted_data.encode("utf-8"))
+        return decrypted.decode("utf-8")
+    except Exception as e:
+        raise ValueError(f"Error al desencriptar datos: {str(e)}") from e
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
